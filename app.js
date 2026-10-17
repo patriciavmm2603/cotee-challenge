@@ -80,7 +80,7 @@
     var off = c * (1 - p);
     return '<svg width="104" height="104" viewBox="0 0 110 110">'
       + '<circle cx="55" cy="55" r="48" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="10"/>'
-      + '<circle cx="55" cy="55" r="48" fill="none" stroke="#F2762E" stroke-width="10" stroke-linecap="round"'
+      + '<circle cx="55" cy="55" r="48" fill="none" stroke="#D98F3C" stroke-width="10" stroke-linecap="round"'
       + ' stroke-dasharray="' + c.toFixed(1) + '" stroke-dashoffset="' + off.toFixed(1) + '" transform="rotate(-90 55 55)"/>'
       + '<text x="55" y="63" text-anchor="middle" fill="#fff" font-size="20" font-weight="800">' + esc(label) + "</text></svg>";
   }
