@@ -1,11 +1,10 @@
-/* Cotee Challenge - app logic (Supabase backend, free tier) */
+/* Wellness Tracker - app logic (Supabase backend, free tier) */
 (function () {
   "use strict";
 
   var cfg = window.COTEE_CONFIG || {};
   var CONFIGURED = !!(cfg.SUPABASE_URL && cfg.SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && window.supabase);
   var supabase = null;
-  var DEMO_MODE = false;
 
   var state = {
     user: null,
@@ -21,7 +20,19 @@
     obMode: "pick",
     epChar: null,
     epMode: "pick",
-    editingActivityId: null
+    editingActivityId: null,
+    // gamification
+    goal: null,
+    goalWeekPoints: 0,
+    badges: [],
+    myBadgeIds: {},
+    streak: 0,
+    totalPoints: 0,
+    distinctActivities: 0,
+    entryCount: 0,
+    levelName: "Rookie",
+    levelPct: 0,
+    levelNext: null
   };
 
   function $(id) { return document.getElementById(id); }
@@ -39,6 +50,48 @@
   }
   function fmtDateTime(iso) {
     return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  }
+
+  /* ---------------- gamification: levels, streaks, goals, badges ---------------- */
+  var LEVELS = [
+    { min: 0, name: "Rookie" },
+    { min: 500, name: "Contender" },
+    { min: 1500, name: "Athlete" },
+    { min: 3000, name: "Pro" },
+    { min: 6000, name: "Champion" }
+  ];
+  function levelFor(total) {
+    var idx = 0;
+    for (var i = 0; i < LEVELS.length; i++) if (total >= LEVELS[i].min) idx = i;
+    var cur = LEVELS[idx], nxt = LEVELS[idx + 1] || null;
+    var pct = nxt ? Math.min(1, Math.max(0, (total - cur.min) / (nxt.min - cur.min))) : 1;
+    return { name: cur.name, pct: pct, next: nxt ? nxt.name : null };
+  }
+  function weekStartDate(d) {
+    var x = new Date(d.getTime());
+    var dow = (x.getDay() + 6) % 7; // Monday = start of week
+    x.setDate(x.getDate() - dow);
+    return x.toISOString().slice(0, 10);
+  }
+  function dayKey(iso) { return String(iso).slice(0, 10); }
+  function computeStreak(dayKeys) {
+    var set = {};
+    dayKeys.forEach(function (k) { set[k] = true; });
+    var d = new Date();
+    var key = dayKey(d.toISOString());
+    if (!set[key]) {
+      d.setDate(d.getDate() - 1);
+      key = dayKey(d.toISOString());
+      if (!set[key]) return 0;
+    }
+    var n = 0;
+    while (set[key]) { n++; d.setDate(d.getDate() - 1); key = dayKey(d.toISOString()); }
+    return n;
+  }
+  function progressBar(pct, color) {
+    var p = Math.round(Math.min(1, Math.max(0, pct)) * 100);
+    return '<div style="height:10px;border-radius:6px;background:rgba(13,59,64,.12);overflow:hidden;margin-top:6px;">'
+      + '<div style="height:100%;width:' + p + '%;border-radius:6px;background:' + (color || "var(--sunset)") + ';transition:width .6s;"></div></div>';
   }
   function setMsg(id, text, kind) {
     var el = $(id);
@@ -86,9 +139,6 @@
   }
 
   /* ---------------- auth ---------------- */
-  function readDemoFlag() {
-    try { return localStorage.getItem("cotee_demo") === "1"; } catch (e) { return false; }
-  }
   function watchAuth() {
     supabase.auth.onAuthStateChange(async function (event, session) {
       if (event === "SIGNED_IN" && session) await onSignedIn(session.user);
@@ -98,35 +148,16 @@
       }
     });
   }
-  function wireDemoButton() {
-    var b = $("demo-open");
-    if (!b || b._wired) return;
-    b._wired = true;
-    b.onclick = async function () {
-      try { localStorage.setItem("cotee_demo", "1"); } catch (e) {}
-      DEMO_MODE = true;
-      supabase = window.DemoSupabase();
-      $("demo-banner").style.display = "block";
-      watchAuth();
-      setMsg("auth-msg", "Starting demo...", "");
-      await onSignedIn({ id: "demo-user-1", email: "demo@cotee.local" });
-    };
-  }
   async function init() {
-    DEMO_MODE = readDemoFlag() && !!window.DemoSupabase;
-    if (DEMO_MODE) {
-      supabase = window.DemoSupabase();
-    } else if (CONFIGURED) {
+    if (CONFIGURED) {
       supabase = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
     }
-    wireDemoButton();
     wireStatic();
     if (!supabase) {
       showView("auth");
-      setMsg("auth-msg", "App is not connected yet. Add your Supabase keys in config.js (see SETUP.md), or try the demo below.", "err");
+      setMsg("auth-msg", "App is not connected yet. Add your Supabase keys in config.js (see SETUP.md).", "err");
       return;
     }
-    if (DEMO_MODE) { $("demo-banner").style.display = "block"; }
     var res = await supabase.auth.getSession();
     if (res.data && res.data.session) {
       await onSignedIn(res.data.session.user);
@@ -138,7 +169,7 @@
 
   async function onSignedIn(user) {
     state.user = user;
-    var res = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+    var res = await supabase.from("cotee_profiles").select("*").eq("id", user.id).maybeSingle();
     if (res.error) { toast("Could not load profile."); return; }
     if (!res.data) {
       state.obChar = JSON.parse(JSON.stringify(AVATARS[0]));
@@ -229,9 +260,9 @@
   /* ---------------- main load ---------------- */
   async function loadApp() {
     if (!CONFIGURED) { $("setup-banner").style.display = "block"; }
-    var a = await supabase.from("activities").select("*").eq("active", true).order("sort_order");
+    var a = await supabase.from("cotee_activities").select("*").eq("active", true).order("sort_order");
     state.activities = a.data || [];
-    var c = await supabase.from("challenges").select("*").order("starts_at", { ascending: false });
+    var c = await supabase.from("cotee_challenges").select("*").order("starts_at", { ascending: false });
     state.challenges = c.data || [];
     var now = new Date();
     var live = state.challenges.filter(function (ch) {
@@ -242,19 +273,19 @@
     if (!state.boardChallengeId && state.challenges.length) {
       state.boardChallengeId = state.activeChallenge ? state.activeChallenge.id : state.challenges[0].id;
     }
-    var p = await supabase.from("profiles").select("id, display_name, avatar").eq("id", state.user.id).maybeSingle();
+    var p = await supabase.from("cotee_profiles").select("id, display_name, avatar").eq("id", state.user.id).maybeSingle();
     if (p.data) state.profilesById[state.user.id] = p.data;
-    var all = await supabase.from("profiles").select("id, display_name, avatar");
+    var all = await supabase.from("cotee_profiles").select("id, display_name, avatar");
     (all.data || []).forEach(function (pr) { state.profilesById[pr.id] = pr; });
 
     var isAdmin = !!state.profile.is_admin;
     $("tabbtn-admin").classList.toggle("hidden", !isAdmin);
     $("admin-challenge-btn").style.display = isAdmin ? "block" : "none";
-    if (DEMO_MODE) { $("demo-admin-card").style.display = "block"; }
 
     $("hdr-avatar").innerHTML = avatarSVG(charOf(state.profile), 44);
     $("hdr-name").textContent = state.profile.display_name;
 
+    await loadGamification();
     renderLogGrid();
     showView("main");
     switchTab("home");
@@ -263,7 +294,7 @@
 
   async function refreshHeader() {
     var weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-    var r = await supabase.from("entries").select("points")
+    var r = await supabase.from("cotee_entries").select("points")
       .eq("user_id", state.user.id).eq("flagged", false).gte("created_at", weekAgo);
     var total = (r.data || []).reduce(function (s, e) { return s + Number(e.points); }, 0);
     $("hdr-points").textContent = fmtPts(total);
@@ -277,11 +308,89 @@
   }
 
   async function leaderboardRows(ch) {
-    var r = await supabase.rpc("challenge_leaderboard", {
+    var r = await supabase.rpc("cotee_leaderboard", {
       p_starts_at: ch.starts_at,
       p_ends_at: ch.ends_at
     });
     return r.data || [];
+  }
+
+  /* ---------------- gamification data ---------------- */
+  async function loadGamification() {
+    var uid = state.user.id;
+    var r = await supabase.from("cotee_entries").select("points, activity_id, created_at")
+      .eq("user_id", uid).eq("flagged", false);
+    var rows = r.data || [];
+    var total = 0, acts = {}, days = {};
+    var ws = weekStartDate(new Date());
+    var weekPts = 0;
+    rows.forEach(function (e) {
+      total += Number(e.points) || 0;
+      acts[e.activity_id] = true;
+      var dk = dayKey(e.created_at);
+      days[dk] = true;
+      if (dk >= ws) weekPts += Number(e.points) || 0;
+    });
+    state.totalPoints = total;
+    state.entryCount = rows.length;
+    state.distinctActivities = Object.keys(acts).length;
+    state.streak = computeStreak(Object.keys(days));
+    state.goalWeekPoints = weekPts;
+    var lv = levelFor(total);
+    state.levelName = lv.name;
+    state.levelPct = lv.pct;
+    state.levelNext = lv.next;
+    var g = await supabase.from("cotee_goals").select("*")
+      .eq("user_id", uid).eq("week_start", ws).maybeSingle();
+    state.goal = (g.data || null);
+    var b = await supabase.from("cotee_badges").select("*").order("sort_order");
+    state.badges = b.data || [];
+    var mb = await supabase.from("cotee_user_badges").select("badge_id").eq("user_id", uid);
+    var have = {};
+    (mb.data || []).forEach(function (x) { have[x.badge_id] = true; });
+    state.myBadgeIds = have;
+  }
+
+  async function checkBadges() {
+    await loadGamification();
+    var earned = [];
+    var rules = [
+      { key: "first-log", ok: state.entryCount >= 1 },
+      { key: "streak-3", ok: state.streak >= 3 },
+      { key: "streak-7", ok: state.streak >= 7 },
+      { key: "streak-30", ok: state.streak >= 30 },
+      { key: "points-1000", ok: state.totalPoints >= 1000 },
+      { key: "points-5000", ok: state.totalPoints >= 5000 },
+      { key: "explorer", ok: state.distinctActivities >= 10 },
+      { key: "goal-crusher", ok: !!(state.goal && state.goalWeekPoints >= Number(state.goal.target_points)) }
+    ];
+    for (var i = 0; i < rules.length; i++) {
+      var b = null;
+      for (var j = 0; j < state.badges.length; j++) {
+        if (state.badges[j].key === rules[i].key) { b = state.badges[j]; break; }
+      }
+      if (b && rules[i].ok && !state.myBadgeIds[b.id]) {
+        var ins = await supabase.from("cotee_user_badges")
+          .insert({ user_id: state.user.id, badge_id: b.id });
+        if (!ins.error) { state.myBadgeIds[b.id] = true; earned.push(b); }
+      }
+    }
+    return earned;
+  }
+
+  function celebrateBadge(b) {
+    try {
+      var el = $("celebrate");
+      if (!el) return;
+      var trophy = el.querySelector(".trophy");
+      if (trophy) trophy.textContent = b.icon || "🏅";
+      el.querySelector(".cel-title").textContent = "Badge earned!";
+      el.querySelector(".cel-pts").textContent = b.name;
+      el.classList.add("show");
+      if (window.CoteeMotion && window.CoteeMotion.confetti) {
+        window.CoteeMotion.confetti({ count: 120, duration: 2500 });
+      }
+    } catch (e) {}
   }
 
   function lbRowHtml(row, pos, isMe) {
@@ -300,7 +409,7 @@
     var hero = $("hero");
     var ch = state.activeChallenge;
     if (!ch) {
-      hero.innerHTML = '<div class="hero"><div class="kicker">COTEE CHALLENGE</div>'
+      hero.innerHTML = '<div class="hero"><div class="kicker">WELLNESS TRACKER</div>'
         + "<h2>No active challenge</h2>"
         + '<p class="desc">Log activity any time. It counts toward the next challenge automatically.</p></div>';
       $("home-board").innerHTML = '<div class="empty">The board lights up when a challenge starts.</div>';
@@ -355,7 +464,7 @@
     box.querySelectorAll("[data-del-ch]").forEach(function (b) {
       b.onclick = async function () {
         if (!confirm("Delete this challenge? Logged points stay, but the challenge disappears.")) return;
-        var r = await supabase.from("challenges").delete().eq("id", b.getAttribute("data-del-ch"));
+        var r = await supabase.from("cotee_challenges").delete().eq("id", b.getAttribute("data-del-ch"));
         if (r.error) toast("Could not delete.");
         else { toast("Challenge deleted."); await loadApp(); }
       };
@@ -375,6 +484,53 @@
     $("board-list").innerHTML = rows.length
       ? rows.map(function (r, i) { return lbRowHtml(r, i + 1, r.user_id === state.user.id); }).join("")
       : '<div class="empty">No points logged in this window yet.</div>';
+    var rb = $("race-open");
+    if (rb) {
+      rb.style.display = "block";
+      rb.onclick = function () { openRace(); };
+    }
+  }
+
+  /* ---------------- top-5 race ---------------- */
+  async function openRace() {
+    var ch = state.challenges.find(function (x) { return String(x.id) === String(state.boardChallengeId); });
+    if (!ch) { toast("Pick a challenge first."); return; }
+    toast("Loading the race...");
+    var rows = await leaderboardRows(ch);
+    var top = rows.slice(0, 5).filter(function (r) { return Number(r.total_points) > 0; });
+    if (top.length < 2) { toast("Need at least 2 racers with points."); return; }
+    var ids = top.map(function (r) { return r.user_id; });
+    var q = await supabase.from("cotee_entries").select("user_id, points, created_at")
+      .in("user_id", ids).eq("flagged", false)
+      .gte("created_at", ch.starts_at).lte("created_at", ch.ends_at)
+      .order("created_at", { ascending: true });
+    var entries = q.data || [];
+    var start = new Date(ch.starts_at).getTime();
+    var end = Math.min(new Date(ch.ends_at).getTime(), Date.now());
+    if (end <= start) end = start + 86400000;
+    var ticks = Math.min(24, Math.max(1, Math.ceil((end - start) / 86400000)));
+    var cum = {}, days = [], ei = 0;
+    ids.forEach(function (id) { cum[id] = 0; });
+    for (var t = 0; t < ticks; t++) {
+      var tickEnd = start + ((end - start) * (t + 1)) / ticks;
+      while (ei < entries.length && new Date(entries[ei].created_at).getTime() <= tickEnd) {
+        cum[entries[ei].user_id] = (cum[entries[ei].user_id] || 0) + (Number(entries[ei].points) || 0);
+        ei++;
+      }
+      var snap = {};
+      ids.forEach(function (id) { snap[id] = cum[id]; });
+      days.push({ label: fmtDate(new Date(tickEnd).toISOString()) + " · day " + (t + 1) + " of " + ticks, totals: snap });
+    }
+    var racers = top.map(function (r, i) {
+      var pr = state.profilesById[r.user_id] || {};
+      return {
+        id: r.user_id,
+        name: pr.display_name || r.display_name || ("Racer " + (i + 1)),
+        avatar: r.avatar
+      };
+    });
+    if (window.CoteeRace) window.CoteeRace.play({ racers: racers, days: days, title: ch.title });
+    else toast("Race is still loading, try again in a moment.");
   }
 
   /* ---------------- log tab ---------------- */
@@ -435,9 +591,9 @@
   async function uploadProof(file, userId) {
     var blob = await compressImage(file);
     var path = userId + "/" + Date.now() + ".jpg";
-    var up = await supabase.storage.from("proofs").upload(path, blob, { contentType: "image/jpeg", upsert: false });
+    var up = await supabase.storage.from("cotee-proofs").upload(path, blob, { contentType: "image/jpeg", upsert: false });
     if (up.error) throw up.error;
-    return supabase.storage.from("proofs").getPublicUrl(path).data.publicUrl;
+    return supabase.storage.from("cotee-proofs").getPublicUrl(path).data.publicUrl;
   }
 
   async function submitLog() {
@@ -451,7 +607,7 @@
       var proofUrl = null;
       if (state.logProofFile) proofUrl = await uploadProof(state.logProofFile, state.user.id);
       var points = calcPoints();
-      var ins = await supabase.from("entries").insert({
+      var ins = await supabase.from("cotee_entries").insert({
         user_id: state.user.id,
         activity_id: state.logActivity.id,
         quantity: qty,
@@ -468,8 +624,13 @@
       updatePointsPreview();
       setMsg("log-msg", "+" + fmtPts(points) + " pts logged.", "ok");
       toast("Logged +" + fmtPts(points) + " pts");
+      var newBadges = await checkBadges();
       refreshHeader();
       renderHome();
+      renderProfile();
+      (newBadges || []).forEach(function (b, i) {
+        setTimeout(function () { celebrateBadge(b); }, 900 * (i + 1));
+      });
     } catch (e) {
       setMsg("log-msg", "Could not save: " + (e.message || e), "err");
     }
@@ -481,20 +642,75 @@
     $("pf-avatar-big").innerHTML = avatarSVG(charOf(state.profile), 96);
     $("pf-name").textContent = state.profile.display_name;
     $("pf-email").textContent = state.profile.email || "";
-    var r = await supabase.from("entries").select("points")
-      .eq("user_id", state.user.id).eq("flagged", false);
-    var total = (r.data || []).reduce(function (s, e) { return s + Number(e.points); }, 0);
-    var c = await supabase.from("entries").select("id", { count: "exact", head: true })
-      .eq("user_id", state.user.id);
-    $("pf-stats").innerHTML = '<div style="display:flex; gap:10px; text-align:center;">'
+    await loadGamification();
+    var total = state.totalPoints;
+
+    var lvlLine = state.levelNext ? "Next: " + esc(state.levelNext) : "Max level reached";
+    var streakLine = state.streak > 0
+      ? "🔥 " + state.streak + "-day streak"
+      : "Log today to start a streak";
+
+    var goalHtml;
+    if (state.goal) {
+      var gpct = Math.min(1, state.goalWeekPoints / Math.max(1, Number(state.goal.target_points)));
+      goalHtml = '<div style="display:flex;justify-content:space-between;align-items:baseline;">'
+        + "<b>My weekly goal</b>"
+        + '<span style="font-weight:800;color:var(--deep);">' + fmtPts(state.goalWeekPoints) + " / " + fmtPts(state.goal.target_points) + " pts</span></div>"
+        + progressBar(gpct)
+        + (state.goalWeekPoints >= Number(state.goal.target_points)
+          ? '<div style="margin-top:6px;font-weight:700;color:var(--teal);">🎯 Goal crushed this week!</div>' : "");
+    } else {
+      goalHtml = "<b>My weekly goal</b>"
+        + '<div style="font-size:13px;color:var(--muted);margin:4px 0 8px;">Set a points target for this week.</div>';
+    }
+    goalHtml += '<div style="display:flex;gap:8px;margin-top:10px;">'
+      + '<input type="number" id="goal-target" placeholder="e.g. 300" min="1" style="flex:1;" value="'
+      + (state.goal ? esc(String(state.goal.target_points)) : "") + '">'
+      + '<button class="btn small" id="goal-save" type="button">Save</button></div>';
+
+    var badgeHtml = state.badges.length ? state.badges.map(function (b) {
+      var got = !!state.myBadgeIds[b.id];
+      return '<div title="' + esc(b.description) + '" style="text-align:center;opacity:' + (got ? "1" : ".35")
+        + ";filter:" + (got ? "none" : "grayscale(1)") + ';\">'
+        + '<div style="font-size:30px;">' + esc(b.icon) + "</div>"
+        + '<div style="font-size:11px;font-weight:700;">' + esc(b.name) + "</div></div>";
+    }).join("") : '<div class="empty">Badges are coming soon.</div>';
+
+    $("pf-stats").innerHTML =
+      '<div class="card" style="margin-bottom:12px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline;"><b>Level: ' + esc(state.levelName) + "</b>"
+      + '<span style="font-size:12px;color:var(--muted);">' + esc(lvlLine) + "</span></div>"
+      + progressBar(state.levelPct, "var(--teal)")
+      + '<div style="margin-top:8px;font-size:14px;">' + esc(streakLine) + "</div></div>"
+      + '<div class="card" style="margin-bottom:12px;">' + goalHtml + "</div>"
+      + '<h3 style="margin:14px 0 8px;">Badges</h3>'
+      + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:6px;">' + badgeHtml + "</div>"
+      + '<div style="display:flex; gap:10px; text-align:center;margin-top:12px;">'
       + '<div style="flex:1;"><div style="font-size:22px;font-weight:800;color:var(--deep);">' + fmtPts(total) + '</div><div style="font-size:12px;color:var(--muted);">total points</div></div>'
-      + '<div style="flex:1;"><div style="font-size:22px;font-weight:800;color:var(--deep);">' + (c.count || 0) + '</div><div style="font-size:12px;color:var(--muted);">logs</div></div></div>';
-    var e = await supabase.from("entries").select("*, activities(name, unit)")
+      + '<div style="flex:1;"><div style="font-size:22px;font-weight:800;color:var(--deep);">' + state.entryCount + '</div><div style="font-size:12px;color:var(--muted);">logs</div></div></div>';
+
+    var gs = $("goal-save");
+    if (gs) gs.onclick = async function () {
+      var t = parseFloat($("goal-target").value);
+      if (!(t > 0)) { toast("Enter a target above 0."); return; }
+      var ws = weekStartDate(new Date());
+      var up = await supabase.from("cotee_goals").upsert(
+        { user_id: state.user.id, week_start: ws, target_points: t },
+        { onConflict: "user_id,week_start" }
+      );
+      if (up.error) { toast("Could not save goal."); return; }
+      toast("Weekly goal saved.");
+      var nb = await checkBadges();
+      renderProfile();
+      refreshHeader();
+      (nb || []).forEach(function (b, i) { setTimeout(function () { celebrateBadge(b); }, 900 * (i + 1)); });
+    };
+    var e = await supabase.from("cotee_entries").select("*, cotee_activities(name, unit)")
       .eq("user_id", state.user.id).order("created_at", { ascending: false }).limit(20);
     var rows = e.data || [];
     $("pf-entries").innerHTML = rows.length ? rows.map(function (en) {
-      var an = (en.activities && en.activities.name) || "Activity";
-      var un = (en.activities && en.activities.unit) || "";
+      var an = (en.cotee_activities && en.cotee_activities.name) || "Activity";
+      var un = (en.cotee_activities && en.cotee_activities.unit) || "";
       return '<div class="card"><div style="display:flex; justify-content:space-between; align-items:center;">'
         + "<div><b>" + esc(an) + "</b> · " + esc(String(en.quantity)) + " " + esc(un)
         + '<div style="font-size:12px;color:var(--muted);">' + fmtDateTime(en.created_at)
@@ -506,7 +722,7 @@
     $("pf-entries").querySelectorAll("[data-del-en]").forEach(function (b) {
       b.onclick = async function () {
         if (!confirm("Delete this entry?")) return;
-        var del = await supabase.from("entries").delete().eq("id", b.getAttribute("data-del-en"));
+        var del = await supabase.from("cotee_entries").delete().eq("id", b.getAttribute("data-del-en"));
         if (del.error) toast("Could not delete.");
         else { toast("Entry deleted."); renderProfile(); refreshHeader(); renderHome(); }
       };
@@ -515,11 +731,11 @@
 
   /* ---------------- admin ---------------- */
   async function renderAdmin() {
-    var allActs = await supabase.from("activities").select("id, name, unit");
+    var allActs = await supabase.from("cotee_activities").select("id, name, unit");
     var actById = {};
     (allActs.data || []).forEach(function (a) { actById[String(a.id)] = a; });
     // proof queue
-    var q = await supabase.from("entries").select("id, user_id, activity_id, quantity, points, proof_url, note, created_at, flagged")
+    var q = await supabase.from("cotee_entries").select("id, user_id, activity_id, quantity, points, proof_url, note, created_at, flagged")
       .not("proof_url", "is", null).order("created_at", { ascending: false }).limit(40);
     var rows = q.data || [];
     var box = $("admin-proof-queue");
@@ -545,7 +761,7 @@
       box.querySelectorAll("[data-del-en]").forEach(function (b) {
         b.onclick = async function () {
           if (!confirm("Remove this entry and its points?")) return;
-          var del = await supabase.from("entries").delete().eq("id", b.getAttribute("data-del-en"));
+          var del = await supabase.from("cotee_entries").delete().eq("id", b.getAttribute("data-del-en"));
           if (del.error) toast("Could not remove.");
           else { toast("Entry removed."); renderAdmin(); }
         };
@@ -553,27 +769,27 @@
       box.querySelectorAll("[data-flag-en]").forEach(function (b) {
         b.onclick = async function () {
           var to = b.getAttribute("data-flagged") === "1" ? false : true;
-          var up = await supabase.from("entries").update({ flagged: to }).eq("id", b.getAttribute("data-flag-en"));
+          var up = await supabase.from("cotee_entries").update({ flagged: to }).eq("id", b.getAttribute("data-flag-en"));
           if (up.error) toast("Could not update.");
           else { toast(to ? "Flagged (hidden from board)." : "Unflagged."); renderAdmin(); }
         };
       });
     }
     // activities editor
-    var all = await supabase.from("activities").select("*").order("sort_order");
+    var all = await supabase.from("cotee_activities").select("*").order("sort_order");
     var abox = $("admin-activities");
     abox.innerHTML = '<table class="admin-table"><tr><th>Activity</th><th>Pts</th><th>Per</th><th></th></tr>'
       + (all.data || []).map(function (a) {
         return "<tr><td><b>" + esc(a.name) + "</b><br><small style='color:var(--muted)'>" + esc(a.unit) + (a.active ? "" : " · off") + "</small></td>"
           + '<td><input type="number" id="ap-' + a.id + '" value="' + esc(a.points_per) + '" step="any" style="width:64px;"></td>'
-          + '<td><input type="number" id="aq-' + a.id + '" value="' + esc(a.per_quantity) + '" step="any" style="width:64px;"></td>'
+          + '<td><input type="number" id="aq-' + a.id + '" value="' + esc(a.per_quantity) + '" step="any" style="width:64px;"></td>"
           + '<td><button class="btn small secondary" data-save-act="' + a.id + '">Save</button> '
           + '<button class="btn small ghost" data-toggle-act="' + a.id + '" data-active="' + (a.active ? "1" : "0") + '">' + (a.active ? "Off" : "On") + "</button></td></tr>";
       }).join("") + "</table>";
     abox.querySelectorAll("[data-save-act]").forEach(function (b) {
       b.onclick = async function () {
         var id = b.getAttribute("data-save-act");
-        var up = await supabase.from("activities").update({
+        var up = await supabase.from("cotee_activities").update({
           points_per: parseFloat($("ap-" + id).value) || 0,
           per_quantity: parseFloat($("aq-" + id).value) || 1
         }).eq("id", id);
@@ -584,7 +800,7 @@
     abox.querySelectorAll("[data-toggle-act]").forEach(function (b) {
       b.onclick = async function () {
         var to = b.getAttribute("data-active") === "1" ? false : true;
-        var up = await supabase.from("activities").update({ active: to }).eq("id", b.getAttribute("data-toggle-act"));
+        var up = await supabase.from("cotee_activities").update({ active: to }).eq("id", b.getAttribute("data-toggle-act"));
         if (up.error) toast("Could not update.");
         else { toast(to ? "Activity on." : "Activity off."); await loadApp(); }
       };
@@ -609,7 +825,7 @@
   /* ---------------- static wiring ---------------- */
   function wireStatic() {
     $("auth-send").onclick = async function () {
-      if (!supabase) { setMsg("auth-msg", "Sign-in is not connected. Try the demo below.", "err"); return; }
+      if (!supabase) { setMsg("auth-msg", "Sign-in is not connected yet.", "err"); return; }
       var email = $("auth-email").value.trim();
       if (!email || email.indexOf("@") === -1) { setMsg("auth-msg", "Enter a valid email.", "err"); return; }
       setMsg("auth-msg", "Sending...", "");
@@ -627,7 +843,7 @@
       var name = $("ob-name").value.trim();
       if (!name) { setMsg("ob-msg", "Add your name.", "err"); return; }
       setMsg("ob-msg", "Saving...", "");
-      var r = await supabase.from("profiles").upsert({
+      var r = await supabase.from("cotee_profiles").upsert({
         id: state.user.id,
         email: state.user.email,
         display_name: name,
@@ -657,22 +873,6 @@
 
     $("btn-signout").onclick = async function () { await supabase.auth.signOut(); };
 
-    var dAdmin = $("btn-demo-admin");
-    if (dAdmin) dAdmin.onclick = async function () {
-      var to = !state.profile.is_admin;
-      var r = await supabase.from("profiles").update({ is_admin: to }).eq("id", state.user.id);
-      if (r.error) { toast("Could not update."); return; }
-      state.profile.is_admin = to;
-      toast(to ? "Admin preview on." : "Admin preview off.");
-      await loadApp();
-    };
-    var dReset = $("btn-demo-reset");
-    if (dReset) dReset.onclick = function () {
-      if (!confirm("Reset all demo data on this phone?")) return;
-      if (window.DemoSupabase) window.DemoSupabase.resetAll();
-      location.reload();
-    };
-
     $("btn-edit-profile").onclick = function () {
       state.epChar = JSON.parse(JSON.stringify(charOf(state.profile)));
       state.epMode = "pick";
@@ -692,7 +892,7 @@
     $("ep-save").onclick = async function () {
       var name = $("ep-name").value.trim();
       if (!name) { setMsg("ep-msg", "Add your name.", "err"); return; }
-      var r = await supabase.from("profiles").update({ display_name: name, avatar: state.epChar }).eq("id", state.user.id);
+      var r = await supabase.from("cotee_profiles").update({ display_name: name, avatar: state.epChar }).eq("id", state.user.id);
       if (r.error) setMsg("ep-msg", r.error.message, "err");
       else { closeModal(); toast("Profile saved."); await loadApp(); }
     };
@@ -718,7 +918,7 @@
       if (!start || !end) { setMsg("cf-msg", "Pick start and end.", "err"); return; }
       if (new Date(end) <= new Date(start)) { setMsg("cf-msg", "End must be after start.", "err"); return; }
       var target = parseFloat($("cf-target").value);
-      var r = await supabase.from("challenges").insert({
+      var r = await supabase.from("cotee_challenges").insert({
         title: title,
         description: $("cf-desc").value.trim() || null,
         starts_at: new Date(start).toISOString(),
@@ -745,7 +945,7 @@
       if (!name) { setMsg("af-msg", "Name the activity.", "err"); return; }
       if (!(pts > 0) || !(per > 0)) { setMsg("af-msg", "Points and quantity must be above 0.", "err"); return; }
       var maxSort = state.activities.reduce(function (m, a) { return Math.max(m, a.sort_order || 0); }, 0);
-      var r = await supabase.from("activities").insert({
+      var r = await supabase.from("cotee_activities").insert({
         name: name, unit: $("af-unit").value,
         points_per: pts, per_quantity: per, sort_order: maxSort + 1, active: true
       });
