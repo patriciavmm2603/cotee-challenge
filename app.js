@@ -369,10 +369,10 @@
       d.className = "swatch" + (ch.shirt === c ? " sel" : "");
       d.style.background = c;
       d.onclick = function () { ch.shirt = c; paintCreator(pfx, ch); };
-      shRow.appendChild(d);
-    });
+     shRow.appendChild(d);      
+   });
+    
   }
-
   function paintOnboarding() {
     var onPick = function (p) {
       state.obChar = p;
@@ -966,18 +966,37 @@
 
   /* ---------------- static wiring ---------------- */
   function wireStatic() {
-    $("auth-send").onclick = async function () {
+    var pendingEmail = null;
+    function showAuthStep(which) {
+      $("auth-step-email").style.display = which === "email" ? "block" : "none";
+      $("auth-step-code").style.display = which === "code" ? "block" : "none";
+    }
+    async function sendCode(email) {
       if (!supabase) { setMsg("auth-msg", "Sign-in is not connected yet.", "err"); return; }
-      var email = $("auth-email").value.trim();
       if (!email || email.indexOf("@") === -1) { setMsg("auth-msg", "Enter a valid email.", "err"); return; }
       setMsg("auth-msg", "Sending...", "");
       var r = await supabase.auth.signInWithOtp({
         email: email,
         options: { emailRedirectTo: window.location.origin + window.location.pathname }
       });
-      if (r.error) setMsg("auth-msg", r.error.message, "err");
-      else setMsg("auth-msg", "Check your email for the sign-in link.", "ok");
+      if (r.error) { setMsg("auth-msg", r.error.message, "err"); return; }
+      pendingEmail = email;
+      $("auth-sent-to").textContent = email;
+      setMsg("auth-msg", "", "");
+      setMsg("auth-msg2", "Code sent. Check your email.", "ok");
+      showAuthStep("code");
+      $("auth-code").focus();
+    }
+    $("auth-send").onclick = function () { sendCode($("auth-email").value.trim()); };
+    $("auth-verify").onclick = async function () {
+      var code = $("auth-code").value.trim();
+      if (code.length < 6) { setMsg("auth-msg2", "Enter the 6-digit code.", "err"); return; }
+      setMsg("auth-msg2", "Verifying...", "");
+      var r = await supabase.auth.verifyOtp({ email: pendingEmail, token: code, type: "email" });
+      if (r.error) setMsg("auth-msg2", "That code didn't work. Check and try again.", "err");
     };
+    $("auth-resend").onclick = function (e) { e.preventDefault(); if (pendingEmail) sendCode(pendingEmail); };
+    $("auth-change").onclick = function (e) { e.preventDefault(); pendingEmail = null; showAuthStep("email"); };
     $("mode-pick").onclick = function () { setObMode("pick"); };
     $("mode-create").onclick = function () { setObMode("create"); };
     $("ob-save").onclick = async function () {
