@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cotee Challenge</title>
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="motion.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="avatars.js"></script>
@@ -17,12 +18,7 @@
   <div id="view-auth" class="view">
     <div class="center-wrap">
       <div class="brand-mark">
-        <svg viewBox="0 0 48 48" width="52" height="52" aria-hidden="true">
-          <circle cx="24" cy="24" r="23" fill="#0D3B40"/>
-          <circle cx="24" cy="19" r="8" fill="#D98F3C"/>
-          <path d="M8 30 q8 -7 16 0 t16 0" stroke="#5BA3BE" stroke-width="3.4" fill="none" stroke-linecap="round"/>
-          <path d="M12 37 q6 -5 12 0 t12 0" stroke="#1E7A78" stroke-width="3.4" fill="none" stroke-linecap="round"/>
-        </svg>
+        <img src="city-seal.png" width="72" height="72" alt="City of New Port Richey seal">
       </div>
       <h1>Cotee Challenge</h1>
       <div class="sub">New Port Richey &middot; Workplace Wellness</div>
@@ -232,8 +228,20 @@
     </div>
   </div>
 
+  <div class="rank-popup" id="rank-popup"></div>
+
+  <div class="celebrate" id="celebrate">
+    <div class="celebrate-card">
+      <div class="trophy">🏆</div>
+      <h2 class="cel-title">Challenge complete!</h2>
+      <p>You hit <b class="cel-pts"></b>. Incredible work.</p>
+      <button class="btn" id="celebrate-close" type="button">Keep going</button>
+    </div>
+  </div>
+
   <div id="toast"></div>
 </div>
 <script src="app.js"></script>
+<script src="motion.js"></script>
 </body>
 </html>
