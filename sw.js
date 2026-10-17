@@ -27,3 +27,30 @@ self.addEventListener('fetch', function (e) {
       .catch(function () { return caches.match(e.request).then(function (m) { return m || caches.match('./index.html'); }); })
   );
 });
+
+/* ---- web push ---- */
+self.addEventListener('push', function (e) {
+  var data = {};
+  try { data = e.data.json(); } catch (err) {}
+  var title = data.title || 'Wellness Tracker';
+  var options = {
+    body: data.body || 'Time to log your workout.',
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    data: { url: data.url || './' }
+  };
+  e.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
+  var url = (e.notification.data && e.notification.data.url) || './';
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].url.indexOf(self.registration.scope) !== -1) return list[i].focus();
+      }
+      return clients.openWindow(url);
+    })
+  );
+});
