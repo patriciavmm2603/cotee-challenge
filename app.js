@@ -2,9 +2,11 @@
 (function () {
   "use strict";
 
+
   var cfg = window.COTEE_CONFIG || {};
   var CONFIGURED = !!(cfg.SUPABASE_URL && cfg.SUPABASE_URL.indexOf("YOUR-PROJECT") === -1 && window.supabase);
   var supabase = null;
+
 
   var state = {
     user: null,
@@ -41,13 +43,16 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
+
   function fmtPts(n) {
     var v = Math.round(Number(n) || 0);
     return v.toLocaleString("en-US");
   }
+
   function fmtDate(iso) {
     return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
+
   function fmtDateTime(iso) {
     return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   }
@@ -60,6 +65,7 @@
     { min: 3000, name: "Pro" },
     { min: 6000, name: "Champion" }
   ];
+
   function levelFor(total) {
     var idx = 0;
     for (var i = 0; i < LEVELS.length; i++) if (total >= LEVELS[i].min) idx = i;
@@ -67,13 +73,16 @@
     var pct = nxt ? Math.min(1, Math.max(0, (total - cur.min) / (nxt.min - cur.min))) : 1;
     return { name: cur.name, pct: pct, next: nxt ? nxt.name : null };
   }
+
   function weekStartDate(d) {
     var x = new Date(d.getTime());
     var dow = (x.getDay() + 6) % 7; // Monday = start of week
     x.setDate(x.getDate() - dow);
     return x.toISOString().slice(0, 10);
   }
+
   function dayKey(iso) { return String(iso).slice(0, 10); }
+
   function computeStreak(dayKeys) {
     var set = {};
     dayKeys.forEach(function (k) { set[k] = true; });
@@ -88,17 +97,21 @@
     while (set[key]) { n++; d.setDate(d.getDate() - 1); key = dayKey(d.toISOString()); }
     return n;
   }
+
   function progressBar(pct, color) {
     var p = Math.round(Math.min(1, Math.max(0, pct)) * 100);
     return '<div style="height:10px;border-radius:6px;background:rgba(13,59,64,.12);overflow:hidden;margin-top:6px;">'
       + '<div style="height:100%;width:' + p + '%;border-radius:6px;background:' + (color || "var(--sunset)") + ';transition:width .6s;"></div></div>';
   }
+
   function setMsg(id, text, kind) {
     var el = $(id);
     el.textContent = text || "";
     el.className = "msg" + (kind ? " " + kind : "");
   }
+
   var toastTimer = null;
+
   function toast(text) {
     var el = $("toast");
     el.textContent = text;
@@ -106,19 +119,60 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { el.classList.remove("show"); }, 2600);
   }
+
   function showView(name) {
     ["auth", "onboarding", "main"].forEach(function (v) {
       $("view-" + v).classList.toggle("active", v === name);
     });
     window.scrollTo(0, 0);
   }
+
   function openModal(id) {
     $("modal-bg").classList.add("open");
-    ["modal-challenge", "modal-activity", "modal-profile"].forEach(function (m) {
+    ["modal-challenge", "modal-activity", "modal-profile", "modal-badge"].forEach(function (m) {
       $(m).style.display = m === id ? "block" : "none";
     });
   }
+
   function closeModal() { $("modal-bg").classList.remove("open"); }
+
+  /* ---------------- badge popup ---------------- */
+  function badgeProgress(key) {
+    var P = {
+      "first-log": [Math.min(state.entryCount, 1), 1, "log"],
+      "streak-3": [Math.min(state.streak, 3), 3, "days"],
+      "streak-7": [Math.min(state.streak, 7), 7, "days"],
+      "streak-30": [Math.min(state.streak, 30), 30, "days"],
+      "points-1000": [Math.min(state.totalPoints, 1000), 1000, "points"],
+      "points-5000": [Math.min(state.totalPoints, 5000), 5000, "points"],
+      "explorer": [Math.min(state.distinctActivities, 10), 10, "activities"]
+    };
+    if (P[key]) return { cur: P[key][0], target: P[key][1], unit: P[key][2] };
+    if (key === "goal-crusher") {
+      if (!state.goal) return { cur: 0, target: 0, unit: "set a weekly goal first" };
+      var t = Number(state.goal.target_points);
+      return { cur: Math.min(state.goalWeekPoints, t), target: t, unit: "points" };
+    }
+    return null;
+  }
+  function openBadge(key) {
+    var b = null;
+    for (var i = 0; i < state.badges.length; i++) {
+      if (state.badges[i].key === key) { b = state.badges[i]; break; }
+    }
+    if (!b) return;
+    var got = !!state.myBadgeIds[b.id];
+    var pr = badgeProgress(key);
+    $("badge-icon").textContent = b.icon || "🏅";
+    $("badge-name").textContent = b.name;
+    $("badge-desc").textContent = b.description;
+    $("badge-progress").innerHTML = got
+      ? '<div style="font-weight:800;color:var(--teal);">Earned!</div>'
+      : (pr && pr.target
+        ? "<div>" + fmtPts(pr.cur) + " / " + fmtPts(pr.target) + " " + esc(pr.unit) + "</div>" + progressBar(pr.cur / pr.target)
+        : "<div>" + esc(pr ? pr.unit : "") + "</div>");
+    openModal("modal-badge");
+  }
 
   function charOf(profile) {
     var a = profile && profile.avatar;
@@ -148,6 +202,7 @@
       }
     });
   }
+
   async function init() {
     if (CONFIGURED) {
       supabase = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
@@ -196,6 +251,7 @@
       box.appendChild(d);
     });
   }
+
   function paintCreator(pfx, ch) {
     $(pfx + "-preview").innerHTML = avatarSVG(ch, 120);
     var skinRow = $(pfx + "-skin"); skinRow.innerHTML = "";
@@ -233,6 +289,7 @@
       shRow.appendChild(d);
     });
   }
+
   function paintOnboarding() {
     var onPick = function (p) {
       state.obChar = p;
@@ -242,6 +299,7 @@
     paintCreator("cr", state.obChar);
     setObMode(state.obMode);
   }
+
   function setObMode(mode) {
     state.obMode = mode;
     $("mode-pick").classList.toggle("sel", mode === "pick");
@@ -249,6 +307,7 @@
     $("pick-pane").style.display = mode === "pick" ? "block" : "none";
     $("create-pane").style.display = mode === "create" ? "block" : "none";
   }
+
   function setEpMode(mode) {
     state.epMode = mode;
     $("ep-mode-pick").classList.toggle("sel", mode === "pick");
@@ -277,14 +336,11 @@
     if (p.data) state.profilesById[state.user.id] = p.data;
     var all = await supabase.from("cotee_profiles").select("id, display_name, avatar");
     (all.data || []).forEach(function (pr) { state.profilesById[pr.id] = pr; });
-
     var isAdmin = !!state.profile.is_admin;
     $("tabbtn-admin").classList.toggle("hidden", !isAdmin);
     $("admin-challenge-btn").style.display = isAdmin ? "block" : "none";
-
     $("hdr-avatar").innerHTML = avatarSVG(charOf(state.profile), 44);
     $("hdr-name").textContent = state.profile.display_name;
-
     await loadGamification();
     renderLogGrid();
     showView("main");
@@ -443,6 +499,7 @@
     if (new Date(ch.ends_at) < now) return "done";
     return "live";
   }
+
   function renderChallenges() {
     var box = $("challenges-list");
     if (!state.challenges.length) {
@@ -556,12 +613,14 @@
     }
     updatePointsPreview();
   }
+
   function calcPoints() {
     if (!state.logActivity) return 0;
     var qty = parseFloat($("log-qty").value) || 0;
     if (qty <= 0) return 0;
     return Math.round(qty * Number(state.logActivity.points_per) / Number(state.logActivity.per_quantity));
   }
+
   function updatePointsPreview() {
     $("log-points").textContent = "+" + fmtPts(calcPoints()) + " pts";
   }
@@ -588,6 +647,7 @@
       img.src = url;
     });
   }
+
   async function uploadProof(file, userId) {
     var blob = await compressImage(file);
     var path = userId + "/" + Date.now() + ".jpg";
@@ -644,12 +704,10 @@
     $("pf-email").textContent = state.profile.email || "";
     await loadGamification();
     var total = state.totalPoints;
-
     var lvlLine = state.levelNext ? "Next: " + esc(state.levelNext) : "Max level reached";
     var streakLine = state.streak > 0
       ? "🔥 " + state.streak + "-day streak"
       : "Log today to start a streak";
-
     var goalHtml;
     if (state.goal) {
       var gpct = Math.min(1, state.goalWeekPoints / Math.max(1, Number(state.goal.target_points)));
@@ -667,15 +725,13 @@
       + '<input type="number" id="goal-target" placeholder="e.g. 300" min="1" style="flex:1;" value="'
       + (state.goal ? esc(String(state.goal.target_points)) : "") + '">'
       + '<button class="btn small" id="goal-save" type="button">Save</button></div>';
-
     var badgeHtml = state.badges.length ? state.badges.map(function (b) {
       var got = !!state.myBadgeIds[b.id];
-      return '<div title="' + esc(b.description) + '" style="text-align:center;opacity:' + (got ? "1" : ".35")
+      return '<div data-badge="' + esc(b.key) + '" style="text-align:center;cursor:pointer;opacity:' + (got ? "1" : ".35")
         + ";filter:" + (got ? "none" : "grayscale(1)") + ';\">'
         + '<div style="font-size:30px;">' + esc(b.icon) + "</div>"
         + '<div style="font-size:11px;font-weight:700;">' + esc(b.name) + "</div></div>";
     }).join("") : '<div class="empty">Badges are coming soon.</div>';
-
     $("pf-stats").innerHTML =
       '<div class="card" style="margin-bottom:12px;">'
       + '<div style="display:flex;justify-content:space-between;align-items:baseline;"><b>Level: ' + esc(state.levelName) + "</b>"
@@ -689,6 +745,9 @@
       + '<div style="flex:1;"><div style="font-size:22px;font-weight:800;color:var(--deep);">' + fmtPts(total) + '</div><div style="font-size:12px;color:var(--muted);">total points</div></div>'
       + '<div style="flex:1;"><div style="font-size:22px;font-weight:800;color:var(--deep);">' + state.entryCount + '</div><div style="font-size:12px;color:var(--muted);">logs</div></div></div>';
 
+    $("pf-stats").querySelectorAll("[data-badge]").forEach(function (el) {
+      el.onclick = function () { openBadge(el.getAttribute("data-badge")); };
+    });
     var gs = $("goal-save");
     if (gs) gs.onclick = async function () {
       var t = parseFloat($("goal-target").value);
@@ -836,7 +895,6 @@
       if (r.error) setMsg("auth-msg", r.error.message, "err");
       else setMsg("auth-msg", "Check your email for the sign-in link.", "ok");
     };
-
     $("mode-pick").onclick = function () { setObMode("pick"); };
     $("mode-create").onclick = function () { setObMode("create"); };
     $("ob-save").onclick = async function () {
@@ -852,16 +910,13 @@
       if (r.error) setMsg("ob-msg", r.error.message, "err");
       else { state.profile = null; await onSignedIn(state.user); }
     };
-
     document.querySelectorAll(".tab").forEach(function (t) {
       t.onclick = function () { switchTab(t.getAttribute("data-tab")); };
     });
-
     $("board-select").onchange = function () {
       state.boardChallengeId = $("board-select").value;
       renderBoard();
     };
-
     $("log-qty").oninput = updatePointsPreview;
     $("log-proof").onchange = function () {
       var f = $("log-proof").files[0];
@@ -870,9 +925,7 @@
         ? '<img src="' + URL.createObjectURL(f) + '" style="max-width:100%;border-radius:12px;margin-top:8px;">' : "";
     };
     $("log-submit").onclick = submitLog;
-
     $("btn-signout").onclick = async function () { await supabase.auth.signOut(); };
-
     $("btn-edit-profile").onclick = function () {
       state.epChar = JSON.parse(JSON.stringify(charOf(state.profile)));
       state.epMode = "pick";
@@ -897,7 +950,7 @@
       else { closeModal(); toast("Profile saved."); await loadApp(); }
     };
     $("ep-cancel").onclick = closeModal;
-
+    $("badge-close").onclick = closeModal;
     $("btn-new-challenge").onclick = function () {
       var now = new Date();
       var pad = function (n) { return String(n).padStart(2, "0"); };
@@ -929,7 +982,6 @@
       if (r.error) setMsg("cf-msg", r.error.message, "err");
       else { closeModal(); toast("Challenge created."); await loadApp(); }
     };
-
     $("btn-new-activity").onclick = function () {
       state.editingActivityId = null;
       $("af-heading").textContent = "New activity";
@@ -952,11 +1004,9 @@
       if (r.error) setMsg("af-msg", r.error.message, "err");
       else { closeModal(); toast("Activity added."); await loadApp(); }
     };
-
     $("modal-bg").addEventListener("click", function (e) {
       if (e.target === $("modal-bg")) closeModal();
     });
   }
-
   document.addEventListener("DOMContentLoaded", init);
 })();
