@@ -782,7 +782,7 @@
       + (all.data || []).map(function (a) {
         return "<tr><td><b>" + esc(a.name) + "</b><br><small style='color:var(--muted)'>" + esc(a.unit) + (a.active ? "" : " · off") + "</small></td>"
           + '<td><input type="number" id="ap-' + a.id + '" value="' + esc(a.points_per) + '" step="any" style="width:64px;"></td>'
-          + '<td><input type="number" id="aq-' + a.id + '" value="' + esc(a.per_quantity) + '" step="any" style="width:64px;"></td>"
+          + '<td><input type="number" id="aq-' + a.id + '" value="' + esc(a.per_quantity) + '" step="any" style="width:64px;"></td>'
           + '<td><button class="btn small secondary" data-save-act="' + a.id + '">Save</button> '
           + '<button class="btn small ghost" data-toggle-act="' + a.id + '" data-active="' + (a.active ? "1" : "0") + '">' + (a.active ? "Off" : "On") + "</button></td></tr>";
       }).join("") + "</table>";
