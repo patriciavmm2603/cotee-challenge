@@ -1,18 +1,18 @@
 // Original flat-vector character presets for Cotee Challenge.
 // 12 characters, men and women across ages, drawn in code (no stock art).
 const AVATARS = [
-  { skin: "#f1c9a5", hair: "long",  hairColor: "#4a3226", shirt: "#0F6B8A" },
-  { skin: "#6b4226", hair: "short", hairColor: "#1d1d1d", shirt: "#F2762E" },
+  { skin: "#f1c9a5", hair: "long",  hairColor: "#4a3226", shirt: "#1E7A78" },
+  { skin: "#6b4226", hair: "short", hairColor: "#1d1d1d", shirt: "#D98F3C" },
   { skin: "#f1c9a5", hair: "bun",   hairColor: "#c9c9c9", shirt: "#3E9B5F" },
-  { skin: "#e8b88a", hair: "bald",  hairColor: "#000000", shirt: "#0F6B8A" },
-  { skin: "#6b4226", hair: "curly", hairColor: "#1d1d1d", shirt: "#F2762E" },
-  { skin: "#c98e5f", hair: "short", hairColor: "#b5b5b5", shirt: "#0F6B8A" },
+  { skin: "#e8b88a", hair: "bald",  hairColor: "#000000", shirt: "#1E7A78" },
+  { skin: "#6b4226", hair: "curly", hairColor: "#1d1d1d", shirt: "#D98F3C" },
+  { skin: "#c98e5f", hair: "short", hairColor: "#b5b5b5", shirt: "#1E7A78" },
   { skin: "#c98e5f", hair: "long",  hairColor: "#5a3a22", shirt: "#3E9B5F" },
   { skin: "#f1c9a5", hair: "short", hairColor: "#6e4a2f", shirt: "#3E9B5F" },
-  { skin: "#e8b88a", hair: "short", hairColor: "#e8e8e8", shirt: "#F2762E" },
-  { skin: "#6b4226", hair: "short", hairColor: "#9a9a9a", shirt: "#0F6B8A" },
-  { skin: "#5a3a22", hair: "long",  hairColor: "#141414", shirt: "#0F6B8A" },
-  { skin: "#c98e5f", hair: "curly", hairColor: "#2b2b2b", shirt: "#F2762E" }
+  { skin: "#e8b88a", hair: "short", hairColor: "#e8e8e8", shirt: "#D98F3C" },
+  { skin: "#6b4226", hair: "short", hairColor: "#9a9a9a", shirt: "#1E7A78" },
+  { skin: "#5a3a22", hair: "long",  hairColor: "#141414", shirt: "#1E7A78" },
+  { skin: "#c98e5f", hair: "curly", hairColor: "#2b2b2b", shirt: "#D98F3C" }
 ];
 
 function avatarSVG(p, size) {
@@ -54,7 +54,7 @@ function avatarFor(id, size) {
 const SKIN_TONES = ["#f1c9a5", "#e8b88a", "#c98e5f", "#6b4226", "#5a3a22"];
 const HAIR_STYLES = ["short", "long", "bun", "curly", "bald"];
 const HAIR_COLORS = ["#1d1d1d", "#4a3226", "#6e4a2f", "#8a4b2a", "#b5b5b5", "#e8e8e8"];
-const SHIRT_COLORS = ["#0F6B8A", "#F2762E", "#3E9B5F", "#0C3B4E", "#7A3B8F", "#C9A227"];
+const SHIRT_COLORS = ["#1E7A78", "#D98F3C", "#3E9B5F", "#0D3B40", "#7A3B8F", "#C9A227"];
 
 function blankCharacter() {
   return { skin: SKIN_TONES[0], hair: HAIR_STYLES[0], hairColor: HAIR_COLORS[0], shirt: SHIRT_COLORS[0] };
