@@ -811,7 +811,7 @@
     var badgeHtml = state.badges.length ? state.badges.map(function (b) {
       var got = !!state.myBadgeIds[b.id];
       return '<div data-badge="' + esc(b.key) + '" style="text-align:center;cursor:pointer;opacity:' + (got ? "1" : ".35")
-        + ";filter:" + (got ? "none" : "grayscale(1)") + ';"'
+        + ";filter:" + (got ? "none" : "grayscale(1)") + ';">'
         + '<div style="font-size:30px;">' + esc(b.icon) + "</div>"
         + '<div style="font-size:11px;font-weight:700;">' + esc(b.name) + "</div></div>";
     }).join("") : '<div class="empty">Badges are coming soon.</div>';
