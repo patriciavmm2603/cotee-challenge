@@ -970,6 +970,12 @@
     function showAuthStep(which) {
       $("auth-step-email").style.display = which === "email" ? "block" : "none";
       $("auth-step-code").style.display = which === "code" ? "block" : "none";
+      var where = $("auth-whereami");
+      if (where) {
+        where.textContent = isStandalone()
+          ? "You're in the installed app. Type the code here, don't tap the email link. It would open Safari, where the app can't see your login."
+          : "Enter the code from the email, or just tap the link in the email to sign in.";
+      }
     }
     async function sendCode(email) {
       if (!supabase) { setMsg("auth-msg", "Sign-in is not connected yet.", "err"); return; }
