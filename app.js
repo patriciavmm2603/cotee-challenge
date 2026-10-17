@@ -129,12 +129,46 @@
 
   function openModal(id) {
     $("modal-bg").classList.add("open");
-    ["modal-challenge", "modal-activity", "modal-profile", "modal-badge"].forEach(function (m) {
+    ["modal-challenge", "modal-activity", "modal-profile", "modal-badge", "modal-install"].forEach(function (m) {
       $(m).style.display = m === id ? "block" : "none";
     });
   }
 
   function closeModal() { $("modal-bg").classList.remove("open"); }
+
+  /* ---------------- install prompt (Android one-tap, iOS guided steps) ---------------- */
+  var deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); deferredPrompt = e; });
+  function isStandalone() {
+    return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+  }
+  function isIOS() { return /iphone|ipad|ipod/i.test(window.navigator.userAgent || ""); }
+  function installSeen() { try { return localStorage.getItem("wt-install") === "done"; } catch (e) { return true; } }
+  function markInstallSeen() { try { localStorage.setItem("wt-install", "done"); } catch (e) {} }
+  function openInstall() {
+    if (isStandalone()) { toast("Already installed. Look for the Wellness Tracker icon on your home screen."); return; }
+    var steps = $("installSteps"), go = $("installGo");
+    if (deferredPrompt) {
+      $("installHint").textContent = "Add Wellness Tracker to your home screen for one-tap access, just like a real app.";
+      steps.innerHTML = "";
+      go.style.display = "";
+    } else if (isIOS()) {
+      $("installHint").textContent = "On iPhone it takes 3 quick taps:";
+      steps.innerHTML = '<div style="background:var(--sand);border:1px solid var(--line);border-radius:12px;'
+        + 'padding:12px 14px;margin:10px 0;font-size:15px;line-height:2;text-align:left;">'
+        + '<div>1. Tap the <b>Share</b> button in Safari <span style="font-size:18px;">&#x2399;</span><br>'
+        + '<span style="color:var(--muted);font-size:13px;">(the square with an arrow pointing up, at the bottom)</span></div>'
+        + '<div>2. Scroll down and tap <b>Add to Home Screen</b></div>'
+        + '<div>3. Tap <b>Add</b> in the top-right corner</div></div>';
+      go.style.display = "none";
+    } else {
+      $("installHint").textContent = "Use your browser\u2019s \u201cInstall\u201d or \u201cAdd to Home Screen\u201d option to keep Wellness Tracker one tap away.";
+      steps.innerHTML = "";
+      go.style.display = "none";
+    }
+    openModal("modal-install");
+  }
+  function maybeInstallPrompt() { if (!isStandalone() && !installSeen()) openInstall(); }
 
   /* ---------------- badge popup ---------------- */
   function badgeProgress(key) {
@@ -163,7 +197,7 @@
     if (!b) return;
     var got = !!state.myBadgeIds[b.id];
     var pr = badgeProgress(key);
-    $("badge-icon").textContent = b.icon || "🏅";
+    $("badge-icon").textContent = b.icon || "\ud83c\udfc5";
     $("badge-name").textContent = b.name;
     $("badge-desc").textContent = b.description;
     $("badge-progress").innerHTML = got
@@ -236,6 +270,7 @@
     } else {
       state.profile = res.data;
       await loadApp();
+      setTimeout(maybeInstallPrompt, 800);
     }
   }
 
@@ -439,7 +474,7 @@
       var el = $("celebrate");
       if (!el) return;
       var trophy = el.querySelector(".trophy");
-      if (trophy) trophy.textContent = b.icon || "🏅";
+      if (trophy) trophy.textContent = b.icon || "\ud83c\udfc5";
       el.querySelector(".cel-title").textContent = "Badge earned!";
       el.querySelector(".cel-pts").textContent = b.name;
       el.classList.add("show");
@@ -706,7 +741,7 @@
     var total = state.totalPoints;
     var lvlLine = state.levelNext ? "Next: " + esc(state.levelNext) : "Max level reached";
     var streakLine = state.streak > 0
-      ? "🔥 " + state.streak + "-day streak"
+      ? "\ud83d\udd25 " + state.streak + "-day streak"
       : "Log today to start a streak";
     var goalHtml;
     if (state.goal) {
@@ -716,7 +751,7 @@
         + '<span style="font-weight:800;color:var(--deep);">' + fmtPts(state.goalWeekPoints) + " / " + fmtPts(state.goal.target_points) + " pts</span></div>"
         + progressBar(gpct)
         + (state.goalWeekPoints >= Number(state.goal.target_points)
-          ? '<div style="margin-top:6px;font-weight:700;color:var(--teal);">🎯 Goal crushed this week!</div>' : "");
+          ? '<div style="margin-top:6px;font-weight:700;color:var(--teal);">\ud83c\udfaf Goal crushed this week!</div>' : "");
     } else {
       goalHtml = "<b>My weekly goal</b>"
         + '<div style="font-size:13px;color:var(--muted);margin:4px 0 8px;">Set a points target for this week.</div>';
@@ -728,7 +763,7 @@
     var badgeHtml = state.badges.length ? state.badges.map(function (b) {
       var got = !!state.myBadgeIds[b.id];
       return '<div data-badge="' + esc(b.key) + '" style="text-align:center;cursor:pointer;opacity:' + (got ? "1" : ".35")
-        + ";filter:" + (got ? "none" : "grayscale(1)") + ';\">'
+        + ";filter:" + (got ? "none" : "grayscale(1)") + ';">'
         + '<div style="font-size:30px;">' + esc(b.icon) + "</div>"
         + '<div style="font-size:11px;font-weight:700;">' + esc(b.name) + "</div></div>";
     }).join("") : '<div class="empty">Badges are coming soon.</div>';
@@ -926,6 +961,17 @@
     };
     $("log-submit").onclick = submitLog;
     $("btn-signout").onclick = async function () { await supabase.auth.signOut(); };
+
+    $("btn-install").onclick = openInstall;
+    $("installLater").onclick = function () { markInstallSeen(); closeModal(); };
+    $("installGo").onclick = async function () {
+      markInstallSeen(); closeModal();
+      if (deferredPrompt) { try { await deferredPrompt.prompt(); } catch (e) {} deferredPrompt = null; }
+    };
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+    }
     $("btn-edit-profile").onclick = function () {
       state.epChar = JSON.parse(JSON.stringify(charOf(state.profile)));
       state.epMode = "pick";
