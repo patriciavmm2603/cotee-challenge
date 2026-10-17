@@ -30,14 +30,14 @@
     <div class="sub">New Port Richey &middot; Workplace Wellness</div>
     <div class="auth-card">
       <div id="auth-step-email">
-        <p>Sign in with your email. No password to remember, we will send you a 6-digit code.</p>
+        <p>Sign in with your email. No password to remember, we will send you a login code.</p>
         <input type="email" id="auth-email" placeholder="you@work.com" autocomplete="email">
         <button class="btn" id="auth-send">Send me a sign-in code</button>
         <div class="msg" id="auth-msg"></div>
       </div>
       <div id="auth-step-code" style="display:none;">
-        <p>Enter the 6-digit code we emailed to <b id="auth-sent-to"></b>.</p>
-        <input type="text" id="auth-code" placeholder="123456" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+        <p>Enter the code we emailed to <b id="auth-sent-to"></b>.</p>
+        <input type="text" id="auth-code" placeholder="Code" inputmode="numeric" autocomplete="one-time-code" maxlength="10">
         <button class="btn" id="auth-verify">Verify code</button>
         <div class="msg" id="auth-msg2"></div>
         <p class="hint">Using the installed app? Type the code here. Tapping the email link opens Safari instead.<br><a href="#" id="auth-resend">Resend code</a> · <a href="#" id="auth-change">Use a different email</a></p>

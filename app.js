@@ -990,7 +990,7 @@
     $("auth-send").onclick = function () { sendCode($("auth-email").value.trim()); };
     $("auth-verify").onclick = async function () {
       var code = $("auth-code").value.trim();
-      if (code.length < 6) { setMsg("auth-msg2", "Enter the 6-digit code.", "err"); return; }
+      if (!/^\d{4,}$/.test(code)) { setMsg("auth-msg2", "Enter the code from your email.", "err"); return; }
       setMsg("auth-msg2", "Verifying...", "");
       var r = await supabase.auth.verifyOtp({ email: pendingEmail, token: code, type: "email" });
       if (r.error) setMsg("auth-msg2", "That code didn't work. Check and try again.", "err");
