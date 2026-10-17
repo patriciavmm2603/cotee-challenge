@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Cotee Challenge</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="avatars.js"></script>
+<script src="demo.js"></script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ AUTH ============ -->
+  <div id="view-auth" class="view">
+    <div class="center-wrap">
+      <div class="brand-mark">C</div>
+      <h1>Cotee Challenge</h1>
+      <div class="sub">New Port Richey &middot; Workplace Wellness</div>
+      <div class="auth-card">
+        <p>Sign in with your email. No password to remember, we will send you a tap-to-sign-in link.</p>
+        <input type="email" id="auth-email" placeholder="you@work.com" autocomplete="email">
+        <button class="btn" id="auth-send">Send me a sign-in link</button>
+        <div class="msg" id="auth-msg"></div>
+        <div style="margin-top:14px; font-size:13px; color:var(--muted);">Just testing the concept?</div>
+        <button class="btn ghost" id="demo-open" type="button" style="margin-top:6px;">Try the demo, no sign-in</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ONBOARDING ============ -->
+  <div id="view-onboarding" class="view">
+    <div class="center-wrap" style="justify-content:flex-start; padding-top:48px;">
+      <h1 style="font-size:24px;">Set up your profile</h1>
+      <div class="sub">Pick a character or create your own.</div>
+      <div class="auth-card" style="text-align:left;">
+        <input type="text" id="ob-name" placeholder="Your name (as it shows on the board)" maxlength="40">
+        <div class="mode-toggle">
+          <button class="pill sel" id="mode-pick" type="button">Pick one</button>
+          <button class="pill" id="mode-create" type="button">Create yours</button>
+        </div>
+        <div id="pick-pane">
+          <div class="avatar-grid" id="avatar-grid"></div>
+        </div>
+        <div id="create-pane" style="display:none;">
+          <div class="creator-preview" id="creator-preview"></div>
+          <div class="creator-row"><div class="lbl">Skin</div><div class="swatch-row" id="cr-skin"></div></div>
+          <div class="creator-row"><div class="lbl">Hair style</div><div class="pill-row" id="cr-hair"></div></div>
+          <div class="creator-row"><div class="lbl">Hair color</div><div class="swatch-row" id="cr-haircolor"></div></div>
+          <div class="creator-row"><div class="lbl">Shirt</div><div class="swatch-row" id="cr-shirt"></div></div>
+        </div>
+        <button class="btn" id="ob-save" style="margin-top:14px;">Start</button>
+        <div class="msg" id="ob-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MAIN ============ -->
+  <div id="view-main" class="view">
+    <div class="setup-banner" id="setup-banner" style="display:none;">
+      This app is not connected yet. Add your Supabase URL and key in <b>config.js</b> (see SETUP.md).
+    </div>
+    <div class="setup-banner" id="demo-banner" style="display:none; border-color:var(--river); background:#EAF3F7;">
+      <b>Demo mode.</b> Everything stays on this phone, nothing is shared yet. The real backend comes later.
+    </div>
+
+    <div class="app-header">
+      <div class="app-title">COTEE CHALLENGE</div>
+      <div class="row">
+        <div class="who">
+          <span id="hdr-avatar" style="width:44px;height:44px;display:block;"></span>
+          <span><span class="nm" id="hdr-name">--</span><br><span class="rk" id="hdr-rank"></span></span>
+        </div>
+        <div class="pts"><b id="hdr-points">0</b><span>pts this week</span></div>
+      </div>
+    </div>
+
+    <!-- HOME -->
+    <div id="tab-home" class="tabpane">
+      <div id="hero"></div>
+      <div class="section">
+        <h3>Top 5 right now</h3>
+        <div id="home-board"></div>
+      </div>
+    </div>
+
+    <!-- CHALLENGES -->
+    <div id="tab-challenges" class="tabpane" style="display:none;">
+      <div class="section">
+        <h3>Challenges</h3>
+        <div id="admin-challenge-btn" style="display:none; margin-bottom:10px;">
+          <button class="btn small" id="btn-new-challenge">+ New challenge</button>
+        </div>
+        <div id="challenges-list"></div>
+      </div>
+    </div>
+
+    <!-- LEADERBOARD -->
+    <div id="tab-board" class="tabpane" style="display:none;">
+      <div class="section">
+        <h3>Leaderboard</h3>
+        <select id="board-select" style="margin-bottom:10px;"></select>
+        <div id="board-list"></div>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div id="tab-log" class="tabpane" style="display:none;">
+      <div class="section">
+        <h3>Log activity</h3>
+        <div class="act-grid" id="log-activity-grid"></div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <input type="number" id="log-qty" placeholder="How many?" min="0" step="any" style="margin-bottom:0;">
+          <span id="log-unit" style="font-weight:700; color:var(--muted); white-space:nowrap;"></span>
+        </div>
+        <div class="points-preview" id="log-points">+0 pts</div>
+        <label class="file-label" for="log-proof">Add proof (optional): photo, upload, or screenshot</label>
+        <input type="file" id="log-proof" accept="image/*">
+        <div class="proof-preview" id="log-proof-preview"></div>
+        <input type="text" id="log-note" placeholder="Note (optional)" maxlength="120">
+        <button class="btn" id="log-submit">Log it</button>
+        <div class="msg" id="log-msg"></div>
+      </div>
+    </div>
+
+    <!-- PROFILE -->
+    <div id="tab-profile" class="tabpane" style="display:none;">
+      <div class="section">
+        <h3>My profile</h3>
+        <div class="card" style="text-align:center;">
+          <div id="pf-avatar-big" style="display:flex; justify-content:center;"></div>
+          <div style="font-size:20px; font-weight:800; margin-top:8px;" id="pf-name">--</div>
+          <div style="color:var(--muted); font-size:13px;" id="pf-email"></div>
+          <div style="margin-top:10px;"><button class="btn small ghost" id="btn-edit-profile">Edit name / character</button></div>
+        </div>
+        <h3>My stats</h3>
+        <div class="card" id="pf-stats"></div>
+        <h3>My recent entries</h3>
+        <div id="pf-entries"></div>
+        <div class="card" id="demo-admin-card" style="display:none;">
+          <div style="font-weight:700; margin-bottom:8px;">Demo tools</div>
+          <div style="font-size:13px; color:var(--muted); margin-bottom:10px;">Preview what Alec will see as admin.</div>
+          <button class="btn small secondary" id="btn-demo-admin">Preview admin view</button>
+          <button class="btn small ghost" id="btn-demo-reset" style="margin-left:8px;">Reset demo data</button>
+        </div>
+        <div style="margin-top:16px;"><button class="btn small ghost" id="btn-signout">Sign out</button></div>
+      </div>
+    </div>
+
+    <!-- ADMIN -->
+    <div id="tab-admin" class="tabpane" style="display:none;">
+      <div class="section">
+        <h3>Proof review</h3>
+        <div id="admin-proof-queue"></div>
+        <h3>Point rules</h3>
+        <div style="margin-bottom:10px;"><button class="btn small" id="btn-new-activity">+ New activity</button></div>
+        <div id="admin-activities"></div>
+      </div>
+    </div>
+
+    <div class="tabbar"><div class="tabbar-inner">
+      <button class="tab on" data-tab="home">Home</button>
+      <button class="tab" data-tab="challenges">Challenges</button>
+      <button class="tab" data-tab="board">Board</button>
+      <button class="tab" data-tab="log">Log</button>
+      <button class="tab" data-tab="profile">Profile</button>
+      <button class="tab hidden" data-tab="admin" id="tabbtn-admin">Admin</button>
+    </div></div>
+  </div>
+
+  <!-- ============ MODALS ============ -->
+  <div class="modal-bg" id="modal-bg">
+    <div class="modal" id="modal-challenge" style="display:none;">
+      <h3>New challenge</h3>
+      <input type="text" id="cf-title" placeholder="Title (e.g. November Move More)" maxlength="60">
+      <textarea id="cf-desc" placeholder="Description (optional)" rows="2" maxlength="280"></textarea>
+      <label style="font-size:13px; color:var(--muted);">Starts</label>
+      <input type="datetime-local" id="cf-start">
+      <label style="font-size:13px; color:var(--muted);">Ends</label>
+      <input type="datetime-local" id="cf-end">
+      <input type="number" id="cf-target" placeholder="Target points (optional)" min="0" step="any">
+      <button class="btn" id="cf-save">Create challenge</button>
+      <div style="margin-top:8px;"><button class="btn ghost" id="cf-cancel">Cancel</button></div>
+      <div class="msg" id="cf-msg"></div>
+    </div>
+    <div class="modal" id="modal-activity" style="display:none;">
+      <h3 id="af-heading">New activity</h3>
+      <input type="text" id="af-name" placeholder="Activity name (e.g. Pushups)" maxlength="40">
+      <select id="af-unit">
+        <option value="reps">reps</option>
+        <option value="steps">steps</option>
+        <option value="miles">miles</option>
+        <option value="minutes">minutes</option>
+        <option value="laps">laps</option>
+      </select>
+      <div style="display:flex; gap:10px;">
+        <input type="number" id="af-points" placeholder="Points" min="0" step="any" value="10">
+        <input type="number" id="af-per" placeholder="Per quantity" min="0" step="any" value="20">
+      </div>
+      <div style="font-size:13px; color:var(--muted); margin-bottom:12px;">Example: 10 points per 20 reps.</div>
+      <button class="btn" id="af-save">Save activity</button>
+      <div style="margin-top:8px;"><button class="btn ghost" id="af-cancel">Cancel</button></div>
+      <div class="msg" id="af-msg"></div>
+    </div>
+    <div class="modal" id="modal-profile" style="display:none;">
+      <h3>Edit profile</h3>
+      <input type="text" id="ep-name" placeholder="Your name" maxlength="40">
+      <div class="mode-toggle">
+        <button class="pill sel" id="ep-mode-pick" type="button">Pick one</button>
+        <button class="pill" id="ep-mode-create" type="button">Create yours</button>
+      </div>
+      <div id="ep-pick-pane"><div class="avatar-grid" id="ep-avatar-grid"></div></div>
+      <div id="ep-create-pane" style="display:none;">
+        <div class="creator-preview" id="ep-creator-preview"></div>
+        <div class="creator-row"><div class="lbl">Skin</div><div class="swatch-row" id="ep-cr-skin"></div></div>
+        <div class="creator-row"><div class="lbl">Hair style</div><div class="pill-row" id="ep-cr-hair"></div></div>
+        <div class="creator-row"><div class="lbl">Hair color</div><div class="swatch-row" id="ep-cr-haircolor"></div></div>
+        <div class="creator-row"><div class="lbl">Shirt</div><div class="swatch-row" id="ep-cr-shirt"></div></div>
+      </div>
+      <button class="btn" id="ep-save" style="margin-top:12px;">Save</button>
+      <div style="margin-top:8px;"><button class="btn ghost" id="ep-cancel">Cancel</button></div>
+      <div class="msg" id="ep-msg"></div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
