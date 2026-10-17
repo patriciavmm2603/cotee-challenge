@@ -170,6 +170,53 @@
   }
   function maybeInstallPrompt() { if (!isStandalone() && !installSeen()) openInstall(); }
 
+  /* ---------------- web push ---------------- */
+  var VAPID_PUBLIC_KEY = "BA3iMtv7fvb04mcUOA9MaRinzVIO906L4zqiEkr5iJh7BRkyP9fHHobrsb7gs1xJGuP5CENITh05CX6DGn9s8Ek";
+  function urlBase64ToUint8Array(base64String) {
+    var padding = "=".repeat((4 - base64String.length % 4) % 4);
+    var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    var raw = window.atob(base64);
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; ++i) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function pushSupported() {
+    return ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
+  }
+  async function refreshPushButton() {
+    var b = $("btn-push");
+    if (!b) return;
+    if (!pushSupported()) { b.style.display = "none"; return; }
+    try {
+      var reg = await navigator.serviceWorker.ready;
+      var sub = await reg.pushManager.getSubscription();
+      b.textContent = sub ? "\ud83d\udd15 Mute notifications" : "\ud83d\udd14 Enable notifications";
+    } catch (e) { b.style.display = "none"; }
+  }
+  async function togglePush() {
+    if (!pushSupported()) return;
+    try {
+      var reg = await navigator.serviceWorker.ready;
+      var sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await sub.unsubscribe();
+        await supabase.from("cotee_push_subscriptions").delete().eq("user_id", state.user.id).eq("endpoint", sub.endpoint);
+        toast("Notifications off.");
+      } else {
+        var perm = await Notification.requestPermission();
+        if (perm !== "granted") { toast("Notifications blocked. Allow them in your browser settings."); return; }
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+        var kj = (sub.toJSON().keys) || {};
+        var ins = await supabase.from("cotee_push_subscriptions").upsert(
+          { user_id: state.user.id, endpoint: sub.endpoint, p256dh: kj.p256dh, auth: kj.auth },
+          { onConflict: "user_id,endpoint" });
+        if (ins.error) throw ins.error;
+        toast("Notifications on.");
+      }
+    } catch (e) { toast("Could not change notification setting."); }
+    refreshPushButton();
+  }
+
   /* ---------------- badge popup ---------------- */
   function badgeProgress(key) {
     var P = {
@@ -271,6 +318,7 @@
       state.profile = res.data;
       await loadApp();
       setTimeout(maybeInstallPrompt, 800);
+      refreshPushButton();
     }
   }
 
@@ -763,7 +811,7 @@
     var badgeHtml = state.badges.length ? state.badges.map(function (b) {
       var got = !!state.myBadgeIds[b.id];
       return '<div data-badge="' + esc(b.key) + '" style="text-align:center;cursor:pointer;opacity:' + (got ? "1" : ".35")
-        + ";filter:" + (got ? "none" : "grayscale(1)") + ';">'
+        + ";filter:" + (got ? "none" : "grayscale(1)") + ';"'
         + '<div style="font-size:30px;">' + esc(b.icon) + "</div>"
         + '<div style="font-size:11px;font-weight:700;">' + esc(b.name) + "</div></div>";
     }).join("") : '<div class="empty">Badges are coming soon.</div>';
@@ -963,6 +1011,7 @@
     $("btn-signout").onclick = async function () { await supabase.auth.signOut(); };
 
     $("btn-install").onclick = openInstall;
+    $("btn-push").onclick = togglePush;
     $("installLater").onclick = function () { markInstallSeen(); closeModal(); };
     $("installGo").onclick = async function () {
       markInstallSeen(); closeModal();
