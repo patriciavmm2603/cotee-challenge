@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Wellness Tracker</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0D3B40">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="motion.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -18,7 +24,7 @@
 <div id="view-auth" class="view">
   <div class="center-wrap">
     <div class="brand-mark">
-      <img src="city-seal.png" width="72" height="72" alt="City of New Port Richey seal">
+      <img src="icon-192.png" width="72" height="72" alt="Wellness Tracker">
     </div>
     <h1>Wellness Tracker</h1>
     <div class="sub">New Port Richey &middot; Workplace Wellness</div>
@@ -132,7 +138,8 @@
       <div class="card" id="pf-stats"></div>
       <h3>My recent entries</h3>
       <div id="pf-entries"></div>
-      <div style="margin-top:16px;"><button class="btn small ghost" id="btn-signout">Sign out</button></div>
+      <div style="margin-top:16px;"><button class="btn small ghost" id="btn-install">📲 Install app</button>
+        <button class="btn small ghost" id="btn-signout">Sign out</button></div>
     </div>
   </div>
   <!-- ADMIN -->
@@ -214,6 +221,13 @@
       <p id="badge-desc" style="color:var(--muted); font-size:14px; margin:0 0 6px;"></p>
       <div id="badge-progress" style="margin:10px 0;"></div>
       <button class="btn ghost" id="badge-close" type="button">Close</button>
+    </div>
+    <div class="modal" id="modal-install" style="display:none;">
+      <h3 style="margin-top:0;">📲 Install the app</h3>
+      <p class="hint" id="installHint">Add Wellness Tracker to your home screen for one-tap access.</p>
+      <div id="installSteps"></div>
+      <button class="btn" id="installGo" type="button" style="display:none;">Install app</button>
+      <div style="margin-top:8px;"><button class="btn ghost" id="installLater" type="button">Not now</button></div>
     </div>
   </div>
   <div class="rank-popup" id="rank-popup"></div>
